@@ -2,12 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Social Card Generator</title>
+	  <link href="
+https://cdn.jsdelivr.net/npm/jameel-noori@1.1.2/jameel-noori.min.css
+" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+	  
     <style>
       @font-face {
         font-family: "Pangea Afrikan Trial";
@@ -27,179 +32,363 @@
       function SocialCardGenerator() {
         const { useState, useRef, useEffect } = React;
         const containerRef = useRef(null);
-        const textRef = useRef(null);
 
-        // --- Multi-image support ---
-        const [images, setImages] = useState([]); // {id, src, x, y, scale, zIndex}
-		// --- Active image selection ---
-const [activeImageId, setActiveImageId] = useState(null);
-
-
-        // --- Canvas & Text ---
+		  // New global border settings
+const [globalBorderColor, setGlobalBorderColor] = useState("#ffffff"); // default white
+const [globalBorderSize, setGlobalBorderSize] = useState(4); // default 4px
+        // --- State variables for the application
+        const [images, setImages] = useState([]);
+        const [activeImageId, setActiveImageId] = useState(null);
         const [width, setWidth] = useState(1200);
         const [height, setHeight] = useState(720);
-        const [headline, setHeadline] = useState("Headline here");
-        const [fontSize, setFontSize] = useState(72);
-        const [lineHeight, setLineHeight] = useState(1.2);
-        const [fontFamily, setFontFamily] = useState("Jameel Noori Nastaleeq");
-        const [textColor, setTextColor] = useState("#ffffff");
-        const [textPos, setTextPos] = useState({ x: 100, y: 200 });
-        const [direction, setDirection] = useState("rtl");
         const [logo, setLogo] = useState({ show: true, position: "top-right" });
         const [fileName, setFileName] = useState("social-card");
-        const [sidelineOffset, setSidelineOffset] = useState(0);
-
-        // --- Shadow & Stroke ---
-        const [shadow, setShadow] = useState({ enabled: true, offsetX: 2, offsetY: 2, blur: 6, color: "rgba(0,0,0,0.6)" });
-        const [stroke, setStroke] = useState({ enabled: false, width: 1, color: "#000000" });
-        const [sideline, setSideline] = useState({ show: true, width: 4, gap: 8, height: 0, color: "#ff0000", opacity: 1 });
-
         const [fitMode, setFitMode] = useState("cover");
+		    const [vignette, setVignette] = useState({ show: false, x: 0, y: 0, scale: 1 });
+
+		 
+
+        // --- NEW: Multiple Headlines & Collapsible Logic ---
+        const [headlines, setHeadlines] = useState([{
+            id: Date.now(),
+            text: "Headline here",
+            fontSize: 90,
+            lineHeight: 1.2,
+            fontFamily: "JameelNooriNastaliq",
+            textColor: "#ffffff",
+            textPos: { x: 100, y: 200 },
+            direction: "rtl",
+            sidelineOffset: 0,
+            shadow: { enabled: true, offsetX: 2, offsetY: 2, blur: 6, color: "rgba(0,0,0,0.6)" },
+            stroke: { enabled: false, width: 1, color: "#000000" },
+            sideline: { show: true, width: 30, gap: 60, height: 0, color: "#ff0000", opacity: 1 },
+            isCollapsed: false,
+        }]);
+        const [expandedHeadlineId, setExpandedHeadlineId] = useState(null);
+        const headlineRefs = useRef({});
+
+        function addHeadline() {
+            const newHeadline = {
+                id: Date.now(),
+                text: "New Headline",
+                fontSize: 60,
+                lineHeight: 1.2,
+                fontFamily: "JameelNooriNastaliq",
+                textColor: "#ffffff",
+                textPos: { x: 100, y: 300 },
+                direction: "rtl",
+                sidelineOffset: 0,
+                shadow: { enabled: true, offsetX: 2, offsetY: 2, blur: 6, color: "rgba(0,0,0,0.6)" },
+                stroke: { enabled: false, width: 1, color: "#000000" },
+                sideline: { show: true, width: 30, gap: 60, height: 0, color: "#ff0000", opacity: 1 },
+                isCollapsed: false,
+            };
+            setHeadlines([...headlines, newHeadline]);
+        }
+
+        function updateHeadline(id, updatedProps) {
+            setHeadlines(current => current.map(h => h.id === id ? { ...h, ...updatedProps } : h));
+        }
+
+		  
+
+        function deleteHeadline(id) {
+            setHeadlines(current => current.filter(h => h.id !== id));
+            if (expandedHeadlineId === id) {
+                setExpandedHeadlineId(null);
+            }
+        }
+
+        // --- Data Persistence & Warning ---
+        useEffect(() => {
+          try {
+            const savedData = localStorage.getItem('socialCardData');
+            if (savedData) {
+              const parsedData = JSON.parse(savedData);
+              if (parsedData.headlines) setHeadlines(parsedData.headlines);
+              if (parsedData.images) setImages(parsedData.images);
+              if (parsedData.width) setWidth(parsedData.width);
+              if (parsedData.height) setHeight(parsedData.height);
+              if (parsedData.logo) setLogo(parsedData.logo);
+              if (parsedData.fileName) setFileName(parsedData.fileName);
+              if (parsedData.fitMode) setFitMode(parsedData.fitMode);
+            }
+          } catch (e) {
+            console.error("Failed to load data from localStorage", e);
+          }
+        }, []);
 
         useEffect(() => {
-          if (textRef.current && sideline.height === 0) {
-            setSideline((s) => ({ ...s, height: textRef.current.offsetHeight }));
-          }
-        }, [headline, fontSize, lineHeight, fontFamily]);
+            const dataToSave = {
+                headlines, images, width, height, logo, fileName, fitMode
+            };
+            try {
+                localStorage.setItem('socialCardData', JSON.stringify(dataToSave));
+            } catch (e) {
+                console.error("Failed to save data to localStorage", e);
+            }
+        }, [headlines, images, width, height, logo, fileName, fitMode]);
 
-        // --- Image Upload ---
+        useEffect(() => {
+          const handleBeforeUnload = (e) => {
+            e.preventDefault();
+            e.returnValue = '';
+          };
+          window.addEventListener('beforeunload', handleBeforeUnload);
+
+          return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+          };
+        }, []);
+
+        // Update sideline height dynamically
+// Update sideline height dynamically for each headline
+useEffect(() => {
+  headlines.forEach(h => {
+    const el = headlineRefs.current[h.id];
+    if (!el) return;
+
+    const newHeight = el.offsetHeight;
+
+    if ((h.sideline?.height || 0) !== newHeight) {
+      updateHeadline(h.id, {
+        sideline: { ...h.sideline, height: newHeight }
+      });
+    }
+  });
+}, [headlines, updateHeadline]);
+
+
+
+
         function onImageUpload(e) {
           const files = e.target.files;
           if (!files) return;
           const newImages = Array.from(files).map((file, index) => ({
             id: Date.now() + index,
             src: URL.createObjectURL(file),
-            x: 0, y: 0, scale: 1, zIndex: images.length + index
+            x: 0, y: 0, scale: 1, zIndex: images.length + index,
+			borderEnabled: false, // 👈 default: no border
           }));
           setImages([...images, ...newImages]);
         }
+        
+        // --- Shared Dragging Logic ---
+        function getCoords(e) {
+          return e.touches ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: e.clientX, y: e.clientY };
+        }
 
-        // --- Dragging ---
         function startDragImage(e, id) {
           e.preventDefault();
-          const startX = e.clientX;
-          const startY = e.clientY;
+          setActiveImageId(id);
+          const { x: startX, y: startY } = getCoords(e);
           const img = images.find(im => im.id === id);
           const initX = img.x, initY = img.y;
           const maxZ = Math.max(...images.map(im => im.zIndex));
-          setImages((imgs) => imgs.map(im => im.id === id ? {...im, zIndex: maxZ+1} : im));
+          setImages((imgs) => imgs.map(im => im.id === id ? {...im, zIndex: maxZ + 1} : im));
 
           function onMove(ev) {
-            setImages((imgs) => imgs.map(im => im.id === id ? {...im, x: initX + ev.clientX-startX, y: initY + ev.clientY-startY} : im));
+            const { x: currentX, y: currentY } = getCoords(ev);
+            setImages((imgs) => imgs.map(im => im.id === id ? {...im, x: initX + currentX - startX, y: initY + currentY - startY} : im));
           }
-          function onUp() { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp);}
+
+          function onUp() {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            window.removeEventListener("touchmove", onMove);
+            window.removeEventListener("touchend", onUp);
+          }
           window.addEventListener("mousemove", onMove);
           window.addEventListener("mouseup", onUp);
+          window.addEventListener("touchmove", onMove);
+          window.addEventListener("touchend", onUp);
         }
 
-        function startDragText(e) {
+        function startDragText(e, id) {
           e.preventDefault();
-          const startX = e.clientX, startY = e.clientY;
-          const initPos = {...textPos};
-          function onMove(ev){ setTextPos({x:initPos.x+ev.clientX-startX, y:initPos.y+ev.clientY-startY})}
-          function onUp(){ window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp)}
-          window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+          const { x: startX, y: startY } = getCoords(e);
+          const headline = headlines.find(h => h.id === id);
+          const initPos = {...headline.textPos};
+          function onMove(ev) {
+            const { x: currentX, y: currentY } = getCoords(ev);
+            updateHeadline(id, { textPos: { x: initPos.x + currentX - startX, y: initPos.y + currentY - startY } });
+          }
+          function onUp() {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            window.removeEventListener("touchmove", onMove);
+            window.removeEventListener("touchend", onUp);
+          }
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", onUp);
+          window.addEventListener("touchmove", onMove);
+          window.addEventListener("touchend", onUp);
         }
 
-        // --- Export ---
+		  function startDragVignette(e) {
+    e.preventDefault();
+    const { x: startX, y: startY } = getCoords(e);
+    const initX = vignette.x, initY = vignette.y;
+    function onMove(ev) {
+        const { x: currentX, y: currentY } = getCoords(ev);
+        setVignette(v => ({ ...v, x: initX + currentX - startX, y: initY + currentY - startY }));
+    }
+    function onUp() {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove);
+    window.addEventListener("touchend", onUp);
+}
+
         function exportAsImage() {
-          if (!containerRef.current) return;
-          const verticalOffset = 3;
-          html2canvas(containerRef.current, {useCORS:true, scale:1, onclone:(clonedDoc)=> {
-            const clonedLine = clonedDoc.querySelector(".sideline-clone");
-            if(clonedLine){ const currentTop = parseFloat(clonedLine.style.top||"0"); clonedLine.style.top=currentTop+verticalOffset+"px";}
-          }}).then((canvas)=>{
-            const link = document.createElement("a");
-            link.download = (fileName && fileName.trim()?fileName.trim():"social-card")+".png";
-            link.href = canvas.toDataURL("image/png"); link.click();
-          });
-        }
+  if (!containerRef.current) return;
 
-        // --- Per-image controls ---
+  // Deselect first so selection overlays are removed before capture
+  setActiveImageId(null);
+
+  // Allow React to re-render to remove selection overlay
+  setTimeout(() => {
+    const verticalOffset = 3;
+    html2canvas(containerRef.current, {
+      useCORS: true,
+      scale: 1,
+      onclone: (clonedDoc) => {
+        const clonedLines = clonedDoc.querySelectorAll(".sideline-clone");
+        clonedLines.forEach(clonedLine => {
+          const currentTop = parseFloat(clonedLine.style.top || "0");
+          clonedLine.style.top = currentTop + verticalOffset + "px";
+        });
+      }
+    })
+    .then((canvas) => {
+      const link = document.createElement("a");
+      link.download = (fileName && fileName.trim() ? fileName.trim() : "social-card") + ".png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    })
+    .catch(err => {
+      console.error("export failed:", err);
+    });
+  }, 0);
+		}
+
         function changeImageScale(id, scale){ setImages((imgs)=>imgs.map(im=>im.id===id?{...im, scale}:im)) }
         function bringForward(id){ const maxZ=Math.max(...images.map(im=>im.zIndex)); setImages((imgs)=>imgs.map(im=>im.id===id?{...im,zIndex:maxZ+1}:im)) }
         function sendBackward(id){ const minZ=Math.min(...images.map(im=>im.zIndex)); setImages((imgs)=>imgs.map(im=>im.id===id?{...im,zIndex:minZ-1}:im)) }
         function deleteImage(id){ setImages((imgs)=>imgs.filter(im=>im.id!==id)) }
-function selectImage(id) {
-  setActiveImageId(id);
-  // Bring selected image to top visually
-  const maxZ = Math.max(...images.map(im => im.zIndex));
-  setImages((imgs) => imgs.map(im => im.id === id ? { ...im, zIndex: maxZ + 1 } : im));
-}
-
-        return (
+        function selectImage(id) {
+          setActiveImageId(id);
+          const maxZ = Math.max(...images.map(im => im.zIndex));
+          setImages((imgs) => imgs.map(im => im.id === id ? { ...im, zIndex: maxZ + 1 } : im));
+        }
+        
+        
+		return (
           <div className="p-4 max-w-7xl mx-auto">
-            <div className="flex gap-6">
+            <div className="flex flex-col md:flex-row gap-6">
               {/* Controls */}
-              <div className="w-96 space-y-4">
+              <div className="w-full md:w-96 space-y-4">
                 <h2 className="text-xl font-semibold">Controls</h2>
 
-                {/* Headline */}
+                {/* Multiple Headlines */}
                 <div className="bg-white p-3 rounded shadow">
-                  <label className="block text-sm font-medium">Headline</label>
-                  <textarea dir={direction} value={headline} onChange={e=>setHeadline(e.target.value)} className="w-full border p-2 rounded" />
-                  <label className="block text-sm mt-2">Font size</label>
-                  <input type="number" value={fontSize} onChange={e=>setFontSize(parseInt(e.target.value))} className="w-full border p-1 rounded"/>
-                  <label className="block text-sm mt-2">Line height</label>
-                  <input type="number" step="0.1" value={lineHeight} onChange={e=>setLineHeight(parseFloat(e.target.value))} className="w-full border p-1 rounded"/>
-                  <label className="block text-sm mt-2">Text color</label>
-                  <input type="color" value={textColor} onChange={e=>setTextColor(e.target.value)}/>
-                  <label className="block text-sm mt-3">Font family</label>
-                  <select value={fontFamily} onChange={e=>setFontFamily(e.target.value)} className="w-full border p-1 rounded mt-2">
-                    <option value="Jameel Noori Nastaleeq">Jameel Noori Nastaleeq</option>
-                    <option value="Pangea Afrikan Trial">Pangea</option>
-                    <option value="Tahoma">Tahoma</option>
-                    <option value="Arial">Arial</option>
-                  </select>
-                  <label className="block text-sm mt-3">Text direction</label>
-                  <select value={direction} onChange={e=>setDirection(e.target.value)} className="w-full border p-1 rounded mt-2">
-                    <option value="ltr">Left to Right</option>
-                    <option value="rtl">Right to Left</option>
-                  </select>
+                    <h3 className="text-lg font-medium mb-2">Headlines</h3>
+                    <button onClick={addHeadline} className="w-full bg-green-500 text-white py-1 rounded mb-2">Add New Headline</button>
+                    {headlines.map(headline => (
+                        <div key={headline.id} className="border-b last:border-b-0 py-2">
+                            <div className="flex justify-between items-center cursor-pointer" onClick={() => setExpandedHeadlineId(expandedHeadlineId === headline.id ? null : headline.id)}>
+                                <span className="font-semibold">{headline.text.substring(0, 20)}...</span>
+                                <span>{expandedHeadlineId === headline.id ? '▲' : '▼'}</span>
+                            </div>
+                            {expandedHeadlineId === headline.id && (
+                                <div className="mt-2 space-y-2">
+                                    <label className="block text-sm font-medium">Text</label>
+                                    <textarea dir={headline.direction} value={headline.text} onChange={e => updateHeadline(headline.id, { text: e.target.value })} className="w-full border p-2 rounded" />
+                                    <label className="block text-sm mt-2">Font size</label>
+                                    <input type="number" value={headline.fontSize} onChange={e => updateHeadline(headline.id, { fontSize: parseInt(e.target.value) })} className="w-full border p-1 rounded"/>
+                                    <label className="block text-sm mt-2">Line height</label>
+                                    <input type="number" step="0.1" value={headline.lineHeight} onChange={e => updateHeadline(headline.id, { lineHeight: parseFloat(e.target.value) })} className="w-full border p-1 rounded"/>
+                                    <label className="block text-sm mt-2">Text color</label>
+                                    <input type="color" value={headline.textColor} onChange={e => updateHeadline(headline.id, { textColor: e.target.value })}/>
+                                    <label className="block text-sm mt-3">Font family</label>
+                                    <select value={headline.fontFamily} onChange={e => updateHeadline(headline.id, { fontFamily: e.target.value })} className="w-full border p-1 rounded mt-2">
+                                        <option value="Jameel Noori Nastaleeq">Jameel Noori Nastaleeq</option>
+                                        <option value="JameelNooriNastaliq">Jameel Noori embed</option>
+                                        <option value="Pangea Afrikan Trial">Pangea</option>
+                                        <option value="Tahoma">Tahoma</option>
+                                        <option value="Arial">Arial</option>
+                                    </select>
+                                    <label className="block text-sm mt-3">Text direction</label>
+                                    <select value={headline.direction} onChange={e => updateHeadline(headline.id, { direction: e.target.value })} className="w-full border p-1 rounded mt-2">
+                                        <option value="ltr">Left to Right</option>
+                                        <option value="rtl">Right to Left</option>
+                                    </select>
+
+                                    {/* Shadow Controls */}
+                                    <div className="mt-4">
+                                        <label className="flex items-center">
+                                            <input type="checkbox" checked={headline.shadow.enabled} onChange={e => updateHeadline(headline.id, { shadow: { ...headline.shadow, enabled: e.target.checked } })}/>
+                                            <span className="ml-2">Enable shadow</span>
+                                        </label>
+                                        {headline.shadow.enabled && <div className="mt-2 grid grid-cols-2 gap-2">
+                                            <label className="text-sm">OffsetX<input type="number" value={headline.shadow.offsetX} onChange={e => updateHeadline(headline.id, { shadow: { ...headline.shadow, offsetX: parseInt(e.target.value) } })} className="w-full border p-1 rounded"/></label>
+                                            <label className="text-sm">OffsetY<input type="number" value={headline.shadow.offsetY} onChange={e => updateHeadline(headline.id, { shadow: { ...headline.shadow, offsetY: parseInt(e.target.value) } })} className="w-full border p-1 rounded"/></label>
+                                            <label className="text-sm">Blur<input type="number" value={headline.shadow.blur} onChange={e => updateHeadline(headline.id, { shadow: { ...headline.shadow, blur: parseInt(e.target.value) } })} className="w-full border p-1 rounded"/></label>
+                                            <label className="text-sm">Color<input type="color" value={headline.shadow.color} onChange={e => updateHeadline(headline.id, { shadow: { ...headline.shadow, color: e.target.value } })} className="w-full border p-1 rounded"/></label>
+                                        </div>}
+                                    </div>
+                                    
+                                    {/* Stroke Controls */}
+                                    <div className="mt-4">
+                                      <label className="flex items-center">
+                                        <input type="checkbox" checked={headline.stroke.enabled} onChange={e=>updateHeadline(headline.id, {stroke:{...headline.stroke,enabled:e.target.checked}})}/>
+                                        <span className="ml-2">Enable stroke</span>
+                                      </label>
+                                      {headline.stroke.enabled && <div className="mt-2 grid grid-cols-2 gap-2">
+                                        <label className="text-sm">Width<input type="number" value={headline.stroke.width} onChange={e=>updateHeadline(headline.id, {stroke:{...headline.stroke,width:parseInt(e.target.value)}})} className="w-full border p-1 rounded"/></label>
+                                        <label className="text-sm">Color<input type="color" value={headline.stroke.color} onChange={e=>updateHeadline(headline.id, {stroke:{...headline.stroke,color:e.target.value}})} className="w-full border p-1 rounded"/></label>
+                                      </div>}
+                                    </div>
+
+                                    {/* Sideline Controls */}
+                                    <div className="mt-4">
+                                      <label className="flex items-center">
+                                        <input type="checkbox" checked={headline.sideline.show} onChange={e=>updateHeadline(headline.id, {sideline:{...headline.sideline,show:e.target.checked}})}/>
+                                        <span className="ml-2">Show sideline</span>
+                                      </label>
+                                      {headline.sideline.show && <>
+                                        <label className="block text-sm">Width<input type="number" value={headline.sideline.width} onChange={e=>updateHeadline(headline.id, {sideline:{...headline.sideline,width:parseInt(e.target.value)}})} className="w-full border p-1 rounded"/></label>
+                                        <label className="block text-sm">Gap<input type="number" value={headline.sideline.gap} onChange={e=>updateHeadline(headline.id, {sideline:{...headline.sideline,gap:parseInt(e.target.value)}})} className="w-full border p-1 rounded"/></label>
+                                        <label className="block text-sm">Height<input type="number" value={headline.sideline.height} onChange={e=>updateHeadline(headline.id, {sideline:{...headline.sideline,height:parseInt(e.target.value)}})} className="w-full border p-1 rounded"/></label>
+                                        <label className="block text-sm">Color<input type="color" value={headline.sideline.color} onChange={e=>updateHeadline(headline.id, {sideline:{...headline.sideline,color:e.target.value}})} className="w-full border p-1 rounded"/></label>
+                                        <label className="block text-sm">Transparency<input type="range" min="0" max="1" step="0.05" value={headline.sideline.opacity} onChange={e=>updateHeadline(headline.id, {sideline:{...headline.sideline,opacity:parseFloat(e.target.value)}})} className="w-full"/></label>
+                                        <label className="block text-sm">Vertical offset<input type="number" value={headline.sidelineOffset} onChange={e=>updateHeadline(headline.id, {sidelineOffset:parseInt(e.target.value)})} className="w-full border p-1 rounded mt-1"/></label>
+                                      </>}
+                                    </div>
+
+                                    <button onClick={() => deleteHeadline(headline.id)} className="w-full bg-red-500 text-white py-1 rounded mt-2">Delete</button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
                 </div>
 
-                {/* Shadow */}
-                <div className="bg-white p-3 rounded shadow">
-                  <label className="flex items-center">
-                    <input type="checkbox" checked={shadow.enabled} onChange={e=>setShadow({...shadow,enabled:e.target.checked})}/>
-                    <span className="ml-2">Enable shadow</span>
-                  </label>
-                  {shadow.enabled && <div className="mt-2 grid grid-cols-2 gap-2">
-                    <label className="text-sm">OffsetX<input type="number" value={shadow.offsetX} onChange={e=>setShadow({...shadow,offsetX:parseInt(e.target.value)})} className="w-full border p-1 rounded"/></label>
-                    <label className="text-sm">OffsetY<input type="number" value={shadow.offsetY} onChange={e=>setShadow({...shadow,offsetY:parseInt(e.target.value)})} className="w-full border p-1 rounded"/></label>
-                    <label className="text-sm">Blur<input type="number" value={shadow.blur} onChange={e=>setShadow({...shadow,blur:parseInt(e.target.value)})} className="w-full border p-1 rounded"/></label>
-                    <label className="text-sm">Color<input type="color" value={shadow.color} onChange={e=>setShadow({...shadow,color:e.target.value})} className="w-full border p-1 rounded"/></label>
-                  </div>}
-                </div>
-
-                {/* Stroke */}
-                <div className="bg-white p-3 rounded shadow">
-                  <label className="flex items-center">
-                    <input type="checkbox" checked={stroke.enabled} onChange={e=>setStroke({...stroke,enabled:e.target.checked})}/>
-                    <span className="ml-2">Enable stroke</span>
-                  </label>
-                  {stroke.enabled && <div className="mt-2 grid grid-cols-2 gap-2">
-                    <label className="text-sm">Width<input type="number" value={stroke.width} onChange={e=>setStroke({...stroke,width:parseInt(e.target.value)})} className="w-full border p-1 rounded"/></label>
-                    <label className="text-sm">Color<input type="color" value={stroke.color} onChange={e=>setStroke({...stroke,color:e.target.value})} className="w-full border p-1 rounded"/></label>
-                  </div>}
-                </div>
-
-                {/* Sideline */}
-                <div className="bg-white p-3 rounded shadow">
-                  <label className="flex items-center">
-                    <input type="checkbox" checked={sideline.show} onChange={e=>setSideline({...sideline,show:e.target.checked})}/>
-                    <span className="ml-2">Show sideline</span>
-                  </label>
-                  {sideline.show && <>
-                    <label className="block text-sm">Width<input type="number" value={sideline.width} onChange={e=>setSideline({...sideline,width:parseInt(e.target.value)})} className="w-full border p-1 rounded"/></label>
-                    <label className="block text-sm">Gap<input type="number" value={sideline.gap} onChange={e=>setSideline({...sideline,gap:parseInt(e.target.value)})} className="w-full border p-1 rounded"/></label>
-                    <label className="block text-sm">Height<input type="number" value={sideline.height} onChange={e=>setSideline({...sideline,height:parseInt(e.target.value)})} className="w-full border p-1 rounded"/></label>
-                    <label className="block text-sm">Color<input type="color" value={sideline.color} onChange={e=>setSideline({...sideline,color:e.target.value})} className="w-full border p-1 rounded"/></label>
-                    <label className="block text-sm">Transparency<input type="range" min="0" max="1" step="0.05" value={sideline.opacity} onChange={e=>setSideline({...sideline,opacity:parseFloat(e.target.value)})} className="w-full"/></label>
-                    <label className="block text-sm">Vertical offset<input type="number" value={sidelineOffset} onChange={e=>setSidelineOffset(parseInt(e.target.value))} className="w-full border p-1 rounded mt-1"/></label>
-                  </>}
-                </div>
-
+				  <div className="bg-white p-3 rounded shadow space-y-1">
+    <label className="flex items-center">
+        <input type="checkbox" checked={vignette.show} onChange={e=>setVignette({...vignette, show: e.target.checked})}/>
+        <span className="ml-2">Show Vignette</span>
+    </label>
+    {vignette.show && <>
+        <label className="block text-sm">Zoom</label>
+        <input type="range" min="0.1" max="3" step="0.05" value={vignette.scale} onChange={e => setVignette({...vignette, scale: parseFloat(e.target.value)})} className="w-full" />
+    </>}
+</div>
+				  
                 {/* Upload images */}
                 <div className="bg-white p-3 rounded shadow">
                   <label className="block text-sm font-medium">Upload images</label>
@@ -225,6 +414,47 @@ function selectImage(id) {
                   </div>
                 ))}
 
+				
+
+				  <div className="flex items-center gap-2 mb-4">
+  <label className="text-sm">Border color:</label>
+  <input
+    type="color"
+    value={globalBorderColor}
+    onChange={(e) => setGlobalBorderColor(e.target.value)}
+    className="w-10 h-8 p-0 border rounded"
+  />
+  <label className="text-sm ml-2">Size:</label>
+  <input
+    type="number"
+    value={globalBorderSize}
+    onChange={(e) => setGlobalBorderSize(Number(e.target.value))}
+    className="w-16 px-2 py-1 border rounded"
+    min="0"
+  />
+</div>
+
+				    {activeImageId && (
+  <div className="flex items-center gap-2 mb-4">
+    <label className="text-sm">Show border</label>
+    <input
+      type="checkbox"
+      checked={
+        images.find((img) => img.id === activeImageId)?.borderEnabled ?? false
+      }
+      onChange={(e) =>
+        setImages((prev) =>
+          prev.map((img) =>
+            img.id === activeImageId
+              ? { ...img, borderEnabled: e.target.checked }
+              : img
+          )
+        )
+      }
+    />
+  </div>
+)}
+
                 {/* Logo */}
                 <div className="bg-white p-3 rounded shadow">
                   <label className="flex items-center">
@@ -249,7 +479,7 @@ function selectImage(id) {
       onClick={() => { setWidth(1080); setHeight(1080); }}
       className="bg-gray-200 px-3 py-1 rounded"
     >
-      Insta/FB Square
+      Instagram Square
     </button>
     <button
       onClick={() => { setWidth(1080); setHeight(1920); }}
@@ -282,60 +512,131 @@ function selectImage(id) {
               </div>
 
               {/* Preview */}
-              <div className="flex-1">
-                <div className="sticky top-4">
-                  <div className="mb-2">Preview (Output size: {width}×{height})</div>
-                  <div ref={containerRef} className="relative mx-auto bg-black overflow-auto" style={{width,height}}>
-                    {/* Images */}
-                    {images.sort((a,b)=>a.zIndex-b.zIndex).map(img=>(
-  <img key={img.id} src={img.src} 
-       onMouseDown={e => { startDragImage(e,img.id); selectImage(img.id); }}
-       style={{
-         position:"absolute",
-         left:img.x,
-         top:img.y,
-         transform:`scale(${img.scale})`,
-         cursor:"grab",
-         width:fitMode==="stretch"?"100%":"auto",
-         height:fitMode==="stretch"?"100%":"auto",
-         maxWidth:fitMode!=="stretch"?"none":"100%",
-         maxHeight:fitMode!=="stretch"?"none":"100%",
-         border: activeImageId === img.id ? '2px solid #3b82f6' : 'none'
-       }}
-  />
-))}
-
-
-                    {/* Sideline */}
-                    {sideline.show && <div className="sideline-clone" style={{
-                      position:"absolute",
-                      [direction==="ltr"?"left":"right"]:sideline.gap,
-                      top:textPos.y+sidelineOffset,
-                      height:sideline.height||textRef.current?.offsetHeight||0,
-                      width:sideline.width,
-                      background:sideline.color,
-                      opacity:sideline.opacity
-                    }}/>}
-
-                    {/* Logo */}
-                    {logo.show && <img src="round-logo.png" alt="Logo" style={{position:"absolute", width:120,height:60,
-                      ...(logo.position==="top-left"?{left:30,top:150}:{})
-                      ,...(logo.position==="top-right"?{right:30,top:150}:{})
-                      ,...(logo.position==="bottom-left"?{left:30,bottom:150}:{})
-                      ,...(logo.position==="bottom-right"?{right:30,bottom:150}:{})
-                    }}/>}
-                    
-                    {/* Headline */}
-                    <div ref={textRef} onMouseDown={startDragText} dir={direction} style={{
-                      position:"absolute", left:textPos.x, top:textPos.y,
-                      fontSize,lineHeight,fontFamily,color:textColor,
-                      textShadow: shadow.enabled?`${shadow.offsetX}px ${shadow.offsetY}px ${shadow.blur}px ${shadow.color}`:"none",
-                      WebkitTextStroke: stroke.enabled?`${stroke.width}px ${stroke.color}`:"none",
-                      whiteSpace:"pre-wrap", cursor:"move"
-                    }}>{headline}</div>
-                  </div>
-                </div>
-              </div>
+      {/* Preview */}
+<div className="flex-1 max-w-full mt-6 md:mt-0">
+  <div className="sticky top-4">
+    <div className="mb-2">Preview (Output size: {width}×{height})</div>
+    <div ref={containerRef} className="relative mx-auto bg-black overflow-hidden" style={{ width, height }}>
+      {/* Images */}
+      {images.sort((a, b) => a.zIndex - b.zIndex).map(img => (
+        <div
+          key={img.id}
+          onMouseDown={e => startDragImage(e, img.id)}
+          onTouchStart={e => startDragImage(e, img.id)}
+          className="absolute"
+          style={{
+            left: img.x,
+            top: img.y,
+            cursor: "grab",
+            zIndex: img.zIndex, // Images have their own z-index
+            border: activeImageId === img.id ? "2px solid #3b82f6" : "none",
+          }}
+        >
+          <img
+            src={img.src}
+            alt="Uploaded Image"
+            style={{
+              transform: `scale(${img.scale})`,
+              transformOrigin: "center center",
+              display: "block",
+              width: fitMode === "stretch" ? "100%" : "auto",
+              height: fitMode === "stretch" ? "100%" : "auto",
+              maxWidth: fitMode !== "stretch" ? "none" : "100%",
+              maxHeight: fitMode !== "stretch" ? "none" : "100%",
+              border: img.borderEnabled
+                ? `${globalBorderSize}px solid ${globalBorderColor}`
+                : "none",
+            }}
+          />
+        </div>
+      ))}
+      
+      {/* Vignette */}
+      {vignette.show && (
+        <img
+          src="Vignette.png"
+          alt="Vignette"
+          onMouseDown={startDragVignette}
+          onTouchStart={startDragVignette}
+          style={{
+            position: "absolute",
+            left: vignette.x,
+            top: vignette.y,
+            transform: `scale(${vignette.scale})`,
+            cursor: "grab",
+            width: "100%",
+            height: "100%",
+            zIndex: 100, // Vignette is above all images
+          }}
+        />
+      )}
+      
+      {/* Logo */}
+      {logo.show && (
+        <img
+          src="sabah-logo.PNG"
+          alt="Logo"
+          style={{
+            position: "absolute",
+            width: 120,
+            height: 60,
+            ...(logo.position === "top-left" ? { left: 30, top: 150 } : {}),
+            ...(logo.position === "top-right" ? { right: 30, top: 150 } : {}),
+            ...(logo.position === "bottom-left" ? { left: 30, bottom: 150 } : {}),
+            ...(logo.position === "bottom-right" ? { right: 30, bottom: 150 } : {}),
+            zIndex: 300, // The highest z-index for the logo
+          }}
+        />
+      )}
+      
+      {/* Multiple Headlines */}
+      {headlines.map(headline => (
+        <React.Fragment key={headline.id}>
+          {headline.sideline.show && (
+            <div
+              className="sideline-clone"
+              style={{
+                position: "absolute",
+                left: headline.direction === "ltr" ? headline.sideline.gap : "auto",
+                right: headline.direction === "rtl" ? headline.sideline.gap : "auto",
+                top: headline.textPos.y + (headline.sidelineOffset || 0),
+                height: headline.sideline.height || 0,
+                width: headline.sideline.width,
+                background: headline.sideline.color,
+                opacity: headline.sideline.opacity,
+                pointerEvents: "none",
+                zIndex: 200, // Headlines are above images and vignette
+              }}
+            />
+          )}
+          <div
+            ref={el => headlineRefs.current[headline.id] = el}
+            onMouseDown={e => startDragText(e, headline.id)}
+            onTouchStart={e => startDragText(e, headline.id)}
+            dir={headline.direction}
+            style={{
+              position: "absolute",
+              left: headline.textPos.x,
+              top: headline.textPos.y,
+              fontSize: headline.fontSize,
+              lineHeight: headline.lineHeight,
+              fontFamily: headline.fontFamily,
+              color: headline.textColor,
+              textShadow: headline.shadow.enabled ? `${headline.shadow.offsetX}px ${headline.shadow.offsetY}px ${headline.shadow.blur}px ${headline.shadow.color}` : "none",
+              WebkitTextStroke: headline.stroke.enabled ? `${headline.stroke.width}px ${headline.stroke.color}` : "none",
+              whiteSpace: "pre-wrap",
+              textAlign: headline.direction === "rtl" ? "right" : "left",
+              cursor: "move",
+              zIndex: 200, // Headlines are above images and vignette
+            }}
+          >
+            {headline.text}
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  </div>
+</div>
             </div>
           </div>
         )
